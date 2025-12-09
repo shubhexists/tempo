@@ -169,6 +169,13 @@ pub enum TempoPoolTransactionError {
         "Insufficient liquidity for fee token: {0}, please see https://docs.tempo.xyz/protocol/fees for more"
     )]
     InsufficientLiquidity(Address),
+
+    /// Thrown when a FeeToken (0x77) transaction is submitted post-AllegroModerato.
+    /// Users should use Tempo transactions (0x76) instead.
+    #[error(
+        "FeeToken transactions (0x77) are deprecated post-AllegroModerato, please use Tempo transactions (0x76) instead"
+    )]
+    DeprecatedFeeTokenTx,
 }
 
 impl PoolTransactionError for TempoPoolTransactionError {
@@ -182,7 +189,7 @@ impl PoolTransactionError for TempoPoolTransactionError {
             | Self::InvalidValidAfter { .. }
             | Self::Keychain(_)
             | Self::InsufficientLiquidity(_) => false,
-            Self::NonZeroValue | Self::SubblockNonceKey => true,
+            Self::NonZeroValue | Self::SubblockNonceKey | Self::DeprecatedFeeTokenTx => true,
         }
     }
 
@@ -370,23 +377,38 @@ impl EthPoolTransaction for TempoPooledTransaction {
 mod tests {
     use super::*;
     use alloy_primitives::address;
-    use tempo_primitives::TxFeeToken;
+    use tempo_primitives::{
+        AASigned, TempoTransaction,
+        transaction::{Call, TempoSignature, tt_signature::PrimitiveSignature},
+    };
 
     #[test]
     fn test_payment_classification_caching() {
         // Test that payment classification is properly cached in TempoPooledTransaction
         let payment_addr = address!("20c0000000000000000000000000000000000001");
-        let tx = TxFeeToken {
-            to: TxKind::Call(payment_addr),
+
+        // Create an AA transaction with a payment address
+        let tx = TempoTransaction {
+            chain_id: 1,
+            nonce: 0,
             gas_limit: 21000,
+            max_fee_per_gas: 1000,
+            max_priority_fee_per_gas: 100,
+            calls: vec![Call {
+                to: TxKind::Call(payment_addr),
+                value: U256::ZERO,
+                input: Bytes::new(),
+            }],
             ..Default::default()
         };
 
-        let envelope = TempoTxEnvelope::FeeToken(alloy_consensus::Signed::new_unchecked(
+        let signed = AASigned::new_unhashed(
             tx,
-            alloy_primitives::Signature::test_signature(),
-            alloy_primitives::B256::ZERO,
-        ));
+            TempoSignature::Primitive(PrimitiveSignature::Secp256k1(
+                alloy_primitives::Signature::test_signature(),
+            )),
+        );
+        let envelope: TempoTxEnvelope = signed.into();
 
         let recovered = Recovered::new_unchecked(
             envelope,

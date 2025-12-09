@@ -141,9 +141,15 @@ impl TempoTxEnvelope {
         }
     }
 
-    /// Returns true if this is a fee token transaction
+    /// Returns true if this is a fee token transaction (either FeeToken 0x77 or AA 0x76 with fee_token set)
     pub fn is_fee_token(&self) -> bool {
         matches!(self, Self::FeeToken(_) | Self::AA(_))
+    }
+
+    /// Returns true if this is specifically a FeeToken (0x77) transaction type.
+    /// This is the deprecated transaction type that should not be used post-AllegroModerato.
+    pub fn is_fee_token_tx(&self) -> bool {
+        matches!(self, Self::FeeToken(_))
     }
 
     /// Returns the authorization list if present (for EIP-7702 and FeeToken transactions)

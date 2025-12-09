@@ -212,6 +212,19 @@ where
             );
         }
 
+        // Reject FeeToken (0x77) transactions post-AllegroModerato.
+        // Users should use Tempo transactions (0x76) instead.
+        let is_allegro_moderato = self
+            .inner
+            .chain_spec()
+            .is_allegro_moderato_active_at_timestamp(self.inner.fork_tracker().tip_timestamp());
+        if is_allegro_moderato && transaction.inner().is_fee_token_tx() {
+            return TransactionValidationOutcome::Invalid(
+                transaction,
+                InvalidPoolTransactionError::other(TempoPoolTransactionError::DeprecatedFeeTokenTx),
+            );
+        }
+
         // Validate transactions that involve keychain keys
         match self.validate_against_keychain(&transaction, &state_provider) {
             Ok(Ok(())) => {}
@@ -523,13 +536,13 @@ mod tests {
                 TempoTxEnvelope::Eip2930(tx) => tx.tx_mut().value = value,
                 TempoTxEnvelope::Eip1559(tx) => tx.tx_mut().value = value,
                 TempoTxEnvelope::Eip7702(tx) => tx.tx_mut().value = value,
+                TempoTxEnvelope::FeeToken(tx) => tx.tx_mut().value = value,
                 // set value to first call
                 TempoTxEnvelope::AA(tx) => {
                     if let Some(first_call) = tx.tx_mut().calls.first_mut() {
                         first_call.value = value;
                     }
                 }
-                TempoTxEnvelope::FeeToken(tx) => tx.tx_mut().value = value,
             }
         }
 
